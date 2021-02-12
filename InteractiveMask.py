@@ -1,13 +1,13 @@
 import numpy as np
 import os
 from sys import exit
-#import tiffcapture as tc
 import glob
 import cv2
 from matplotlib import pyplot as plt
 from os.path import basename
 from math import pow
 import warnings
+import time
 
 #warnings.simplefilter(action = "ignore", category = FutureWarning)
 
@@ -47,7 +47,8 @@ def rmvParticles(img,sig,offset,hsize):
     return isub
 
 def getRect(all_imgs,num_imgs):
-    # defines region of interest for mask using a time-average of all images to show where body is present at all times
+    # defines region of interest for mask using a time-average of all images 
+    # to show where body is present at any times
     print('in getRect')
     for k in range (0,num_imgs):
         itemp = cv2.imread(all_imgs[k],0)
@@ -63,35 +64,44 @@ def getRect(all_imgs,num_imgs):
     global clickcount
     clickcount = 0
 
-    def corclick(event):                 
+    def corclick(event):   
+        print ("in corclick")              
         x = int(event.xdata)
         y = int(event.ydata)
         global clickcount
         global xL, yL, xR, yR, rect
         clickcount = clickcount + 1
         if clickcount == 1:
+            print ("Top left selected")
             xL = x
             yL = y
             if yL < 10:
                 yL = 0
                 
         if clickcount == 2:
+            print ("Bottom right selected")
             xR = x
             yR = y
+            global rect
             rect = tuple([xL,yL,xR-xL,yR-yL])
+            print(rect)
             plt.close(event.canvas.figure)
-            return rect
-
-    cidr = plt.gcf().canvas.mpl_connect('button_press_event', corclick)
+            
     plt.show()
+    cidr = plt.gcf().canvas.mpl_connect('button_press_event', corclick)  
+     
+    while clickcount < 2:
+        plt.pause(1)
+        
+    return rect
     
-    print(clickcount)
  
 if __name__ == "__main__":    
 
     # find files to use
     out_pyr = outpath
-    factor = 2 #use pyrDown to improve smoothness & speed processing. Scales image size down by factor.
+    factor = 2 #use pyrDown to improve smoothness & speed processing
+    # Scales image size down by factor
                 
     # Get all images in each camera folder. This is not natural order sorting.
     all_imgs = sorted(glob.glob(datapath+'/*.tif'))
@@ -122,6 +132,8 @@ if __name__ == "__main__":
                 #plt.imshow(fish_show)
                 #plt.show()
 
+            # contrast enhancement once particles are removed
+            # can be replaced with other preprocessing options
             clahe = cv2.createCLAHE(clipLimit=5.0, tileGridSize=(16,16))
             fish_img = clahe.apply(fish_img)
 
@@ -132,6 +144,7 @@ if __name__ == "__main__":
                 rectflag = 1
                 rect = getRect(use_imgs,num_imgs)
                 print('out of getrect')
+                print (rect)
                 rect=tuple(int(np.around(x/factor)) for x in rect)
                     
                 mask = np.zeros(fish_img.shape[:2],np.uint8)

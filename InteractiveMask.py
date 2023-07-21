@@ -16,16 +16,20 @@ plt.rcParams['keymap.save']=''
 
 #VARIABLES TO CONFIGURE
 start_mask = 0# first image to segment (zero-indexed)
-last_mask = 50 # last image that needs masking (zero-indexed)
+last_mask = 300 # last image that needs masking (zero-indexed)
 override = 0 # whether to override old mask images
 
 # set up paths
 # datapath: input directory of images
 # outpath: output directory of images
-datapath = r"SampleImages/FishBody"
-outpath = r"SampleImages/FishBodyMasked"
+#datapath = r"SampleImages/FishBody"
+#outpath = r"SampleImages/FishBodyMasked"
+datapath = r"C:\Users\lmendelson\Documents\Data\Summer23\BOS\A2_ST5_crop_medfilt"
+outpath = r"C:\Users\lmendelson\Documents\Data\Summer23\BOS\A2_ST5_masked"
 
 mask = None # pre-initialize mask
+global winsize
+winsize = None # pre-allocate window display size
 
 def rmvParticles(img,sig,offset,hsize):
     #image preprocessing function to suppress bright particles
@@ -49,7 +53,7 @@ def rmvParticles(img,sig,offset,hsize):
 def getRect(all_imgs,num_imgs):
     # defines region of interest for mask using a time-average of all images 
     # to show where body is present at any times
-    print('in getRect')
+    print('Input region of interest for mask')
     for k in range (0,num_imgs):
         itemp = cv2.imread(all_imgs[k],0)
         
@@ -64,8 +68,7 @@ def getRect(all_imgs,num_imgs):
     global clickcount
     clickcount = 0
 
-    def corclick(event):   
-        print ("in corclick")              
+    def corclick(event):             
         x = int(event.xdata)
         y = int(event.ydata)
         global clickcount
@@ -87,13 +90,13 @@ def getRect(all_imgs,num_imgs):
             print(rect)
             plt.close(event.canvas.figure)
             
-    plt.show()
     cidr = plt.gcf().canvas.mpl_connect('button_press_event', corclick)  
-     
+    plt.show()
+
     while clickcount < 2:
         plt.pause(1)
         
-    return rect
+    return rect, iavg
     
  
 if __name__ == "__main__":    
@@ -105,6 +108,10 @@ if __name__ == "__main__":
                 
     # Get all images in each camera folder. This is not natural order sorting.
     all_imgs = sorted(glob.glob(datapath+'/*.tif'))
+
+    if len(all_imgs) == 0:
+        all_imgs = sorted(glob.glob(datapath+'/*.tiff'))
+
     use_imgs = all_imgs[start_mask:last_mask]
     num_imgs = len(use_imgs)
 
@@ -139,11 +146,14 @@ if __name__ == "__main__":
 
             fish_img = cv2.cvtColor(fish_img, cv2.COLOR_GRAY2RGB)
 
-            if j == 0 or mask == None or fgdModel[0,0]==0:
+            # invert image
+            # fish_img = cv2.bitwise_not(fish_img)
+
+            if j == 0 or mask is None or fgdModel[0,0]==0:
                 print("Initializing Mask")
                 rectflag = 1
-                rect = getRect(use_imgs,num_imgs)
-                print('out of getrect')
+                rect,iavg = getRect(use_imgs,num_imgs)
+                print('Region of Interest Identified as:')
                 print (rect)
                 rect=tuple(int(np.around(x/factor)) for x in rect)
                     
@@ -183,22 +193,30 @@ if __name__ == "__main__":
             isfish = 255*isfish
 
             fig = plt.figure()
+
+            if winsize is not None:
+                fig.set_size_inches(winsize)
+
             axL=plt.subplot(2,2,1)
             axL.imshow(cv2.bitwise_and(fish_img,fish_img,mask = isfish))
-            plt.title('Click overmasked regions then hit [D] to update, [C] to clear, or [S] to save')
+            plt.title('Click overmasked regions then hit \n [D] to update, [C] to clear, or [S] to save')
             axR=plt.subplot(2,2,2)
-            plt.title('Click undermasked regions then hit [D] to update, [c] to clear, or [S] to save')
+            plt.title('Click undermasked regions then hit \n [D] to update, [c] to clear, or [S] to save')
             axR.imshow(fish_img)
             axBL = plt.subplot(2,2,3)
             mskview = axBL.imshow(mask)
             cbar = fig.colorbar(mskview,ticks = [0,1,2,3])
             cbar.set_ticklabels(['Not Fish','Fish','Probs Not Fish','Probs Fish'])
-            mng = plt.get_current_fig_manager()
-            mng.full_screen_toggle()
+            #mng = plt.get_current_fig_manager()
 
             def save_figure(event):
                 if event.key == 's':
+
+                    # get window size so next frame opens at same size
+                    global winsize
+                    winsize = fig.get_size_inches()
                     plt.close(event.canvas.figure)
+
                     print("Rescaling fish")
                     global isfish
                     isfish = cv2.resize(isfish,None,fx=factor, fy=factor, interpolation = cv2.INTER_CUBIC)
